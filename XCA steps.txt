@@ -1,0 +1,39 @@
+In windows
+install the xca.exe
+1- file -New Data
+2- create new templete 
+3- rootca
+	key -create rootca key
+	certificate -self sign
+	apply templete default or created templete 
+	then apply click apply subject
+	source-ca templete add -apply extension -create certificate
+4- subca
+	key - create subca key
+	certificate - using rootca certificate
+	apply templete default or created templete 
+	then apply click apply subject
+	source-ca templete add -apply extension -5 years- apply-create certificate
+
+5- webserver
+	key -create webserver
+	certificate -using subca certificate
+	apply templete default or created templete 
+	then apply click apply subject
+	source-tls client templete add -apply extension -1years- apply-create certificate
+
+6- webserver key and webserver certificate EXPORT base machine in .pem format
+	key- .pem
+	cer- chain *.pem 
+Then Go to debian 
+	install apache2 and vsftpd
+	in vsftpd un-command -write enable - save the file and restart the service
+	check ip of deb and go base cmd run ftp
+	copy that files to deb
+	go to deb edit the index file /var/www/html/index.html
+	then create dir to in apache2 folder create ssl dir
+	copy that key and certificate files to ssl
+	give permission to ssl dir 600
+	$sudo a2enmod ssl
+	$sudo a2ensite default-ssl
+	$ 

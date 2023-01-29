@@ -1,0 +1,305 @@
+192.168.80.128 - deb 1 - hostname: rootca
+192.168.80.129 - deb 2 - hostname: subca
+192.168.80.130 - deb 3 - hostname: ser1
+
+*********In ser1
+sudo nano /etc/hostname
+ser1
+sudo nano /etc/hosts
+127.0.0.1       localhost
+127.0.1.1       ser1.shuharilabs.local  ser1          - same in deb1 and deb2 (for deb1 - rootca, for deb2 - subca)
+
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+sudo reboot
+sudo apt-get install openssl apache2 tree bind9 dnsutils -y
+sudo cp /etc/bind/db.local /etc/bind/db.fwd
+sudo cp /etc/bind/db.127 /etc/bind/db.rvs
+
+sudo nano /etc/bind/db.fwd
+;
+; BIND data file for local loopback interface
+;
+$TTL    604800
+@       IN      SOA     ser1.shuhari.local. root.shuhari.local. (
+                280120222               ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+        IN      NS      ser1.shuhari.local.
+ser1    IN      A       192.168.80.130
+ns1     IN      CNAME   ser1
+www     IN      CNAME   ser1
+rootca  IN      A       192.168.80.128
+subca   IN      A       192.168.80.129
+
+sudo nano /etc/bind/db.rvs
+;
+; BIND reverse data file for local loopback interface
+;
+$TTL    604800
+@       IN      SOA     ser1.shuhari.local. root.shuhari.local. (
+                        280120221               ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+        IN      NS      ser1.shuhari.local.
+        IN      PTR     shuhari.local.
+128     IN      PTR     rootca.shuhari.local.
+129     IN      PTR     subca.shuhari.local.
+130     IN      PTR     ser1.shuhari.local.
+130     IN      PTR     www.shuhari.local.
+130     IN      PTR     ns1.shuhari.local.
+
+sudo nano /etc/bind/named.conf.local
+zone "shuhari.local" {
+    type master;
+    file "/etc/bind/db.fwd";
+};
+
+zone "80.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.rvs";
+};
+
+sudo named-checkzone shuhari.local /etc/bind/db.fwd
+sudo named-checkzone 80.168.192.in-addr.arpa /etc/bind/db.rvs
+sudo systemctl restart bind9
+sudo systemctl status bind9
+
+sudo nano /etc/resolv.conf                  --- same in 3 machines
+domain shuhari.local
+search shuhari.local
+nameserver 192.168.80.130
+
+
+
+
+if resolv.conf gets updated  to original and nslookup not giving correct results then:
+###In all 3 debian machines 
+sudo apt-get install resolvconf dnsutils openssl
+sudo nano /etc/resolvconf/resolv.conf.d/head
+domain shuhari.local
+search shuhari.local
+nameserver 192.168.80.130
+
+sudo systemctl restart resolvconf
+
+--Run below commands in all 3 machines
+nslookup 192.168.80.128
+nslookup 192.168.80.129
+nslookup 192.168.80.130
+nslookup ser1.shuhari.local
+nslookup ns1.shuhari.local
+nslookup www.shuhari.local
+nslookup rootca.shuhari.local
+nslookup subca.shuhari.local
+
+
+******In deb1-rootca
+sudo apt-get install tree
+mkdir ca
+cd ca/
+mkdir -p certs crl newcerts private subca/csr subca/certs/
+cd ..
+tree ca/
+ca/
+├── certs
+├── crl
+├── newcerts
+├── private
+└── subca
+    ├── certs
+    └── csr
+cd ca/
+
+chmod 700 private/
+
+wget rootca.cnf (get it from server)
+
+nano rootca.cnf
+change directory from /root/ca to /home/shuhari/ca
+dir               = /home/shuhari/ca
+
+openssl genrsa -aes256 -out private/ca.key.pem 4096
+give passphrase: 12345
+
+chmod 400 private/ca.key.pem
+
+openssl req -config rootca.cnf -key private/ca.key.pem -new -x509 -days 7300 -sha256 -extensions v3_ca -out certs/ca.cert.pem
+enter passphrase: 12345
+Country Name (2 letter code) [GB]:IN
+State or Province Name [England]:MH
+Locality Name []:Pune
+Organization Name [Alice Ltd]:IACSD
+Organizational Unit Name []:CDAC
+Common Name []:Shuhari Root CA
+Email Address []:shuhari@local
+
+chmod 444 certs/ca.cert.pem
+
+******In deb2-subca
+mkdir subca
+cd subca/
+mkdir certs crl csr newcerts private
+chmod 700 private
+touch index.txt
+touch index.txt.attr
+echo 1000 > serial
+echo 1000 > crlnumber
+cd ..
+sudo apt-get install tree wget
+tree subca/
+subca/
+├── certs
+├── crl
+├── crlnumber
+├── csr
+├── index.txt
+├── index.txt.attr
+├── newcerts
+├── private
+└── serial
+
+cd subca/
+wget subca.cnf (get it from server)
+
+openssl genrsa -aes256 -out private/subca.key.pem 4096
+give passphrase: 12345
+
+chmod 400 private/subca.key.pem
+
+nano subca.cnf
+change directory from /root/subca to /home/shuhari/subca
+dir               = /home/shuhari/subca
+
+openssl req -config subca.cnf -new -sha256 -key private/subca.key.pem -out csr/subca.csr.pem
+Enter pass phrase for private/subca.key.pem: 12345
+Country Name (2 letter code) [GB]:IN
+State or Province Name [England]:MH
+Locality Name []:Pune
+Organization Name [Alice Ltd]:IACSD
+Organizational Unit Name []:CDAC
+Common Name []:Shuhari Sub CA
+Email Address []:shuhari@local
+
+##copy csr/subca.csr.pem file to rootca machine (/home/shuhari/ca/subca/csr/)
+##  scp csr/subca.csr.pem shuhari@rootca_ip:/home/shuhari/ca/subca/csr/
+scp csr/subca.csr.pem shuhari@192.168.80.128:/home/shuhari/ca/subca/csr/
+
+******In deb1-rootca
+cd ca/
+openssl ca -config rootca.cnf -extensions v3_intermediate_ca -days 3650 -notext -md sha256 -in subca/csr/subca.csr.pem -out subca/certs/subca.cert.pem
+give passphrase for key: 12345
+Sign the certificate? [y/n]:y
+
+1 out of 1 certificate requests certified, commit? [y/n]y
+
+tree
+.
+├── certs
+│   └── ca.cert.pem
+├── crl
+├── crlnumber
+├── index.txt
+├── index.txt.attr
+├── index.txt.attr.old
+├── index.txt.old
+├── newcerts
+│   └── 1000.pem
+├── private
+│   └── ca.key.pem
+├── rootca.cnf
+├── serial
+├── serial.old
+└── subca
+    ├── certs
+    │   └── subca.cert.pem
+    └── csr
+        └── subca.csr.pem
+
+md5sum newcerts/1000.pem subca/certs/subca.cert.pem
+chmod 444 subca/certs/subca.cert.pem
+
+openssl verify -CAfile certs/ca.cert.pem subca/certs/subca.cert.pem
+subca/certs/subca.cert.pem: OK
+
+cat subca/certs/subca.cert.pem certs/ca.cert.pem > subca/certs/ca-chain.cert.pem
+scp subca/certs/ca-chain.cert.pem shuhari@192.168.80.129:/home/shuhari/subca/certs/
+scp subca/certs/subca.cert.pem shuhari@192.168.80.129:/home/shuhari/subca/certs/
+
+
+******In deb3-ser1
+mkdir certs
+cd certs/
+sudo apt-get install wget openssl
+
+wget subca.cnf (file from server)
+
+openssl genrsa -out www.shuhari.local.key.pem 2048
+
+chmod 400 www.shuhari.local.key.pem
+
+openssl req -config subca.cnf -key www.shuhari.local.key.pem -new -sha256 -out www.shuhari.local.csr.pem
+Country Name (2 letter code) [GB]:IN
+State or Province Name [England]:MH
+Locality Name []:Pune
+Organization Name [Alice Ltd]:IACSD
+Organizational Unit Name []:CDAC
+Common Name []:www.shuhari.local
+Email Address []:shuhari@local
+
+scp www.shuhari.local.csr.pem shuhari@(subca_ip):/home/shuhari/subca/csr/
+scp www.shuhari.local.csr.pem shuhari@192.168.80.129:/home/shuhari/subca/csr/
+
+******In deb2-subca
+cd subca/
+
+openssl ca -config subca.cnf -extensions server_cert -days 375 -notext -md sha256 -in csr/www.shuhari.local.csr.pem -out certs/www.shuhari.local.cert.pem
+
+Sign the certificate? [y/n]:y
+
+1 out of 1 certificate requests certified, commit? [y/n]y
+
+#(192.168.80.130 - ser1_ip)
+scp certs/www.shuhari.local.cert.pem shuhari@192.168.80.130:/home/shuhari/certs/
+scp certs/ca-chain.cert.pem shuhari@192.168.80.130:/home/shuhari/certs/
+
+
+******In deb3-ser1
+openssl verify -CAfile ca-chain.cert.pem www.shuhari.local.cert.pem
+www.shuhari.local.cert.pem: OK
+
+sudo mkdir /etc/apache2/ssl
+sudo cp ca-chain.cert.pem /etc/apache2/ssl/
+sudo cp www.shuhari.local.cert.pem /etc/apache2/ssl/
+sudo cp www.shuhari.local.key.pem /etc/apache2/ssl/
+sudo a2enmod ssl
+sudo a2ensite default-ssl
+sudo nano /etc/apache2/sites-enabled/default-ssl.conf
+###
+ServerName www.shuhari.local
+SSLCertificateFile      /etc/apache2/ssl/www.shuhari.local.cert.pem
+SSLCertificateKeyFile /etc/apache2/ssl/www.shuhari.local.key.pem
+#Uncomment below line and give path
+SSLCACertificateFile /etc/apache2/ssl/ca-chain.cert.pem
+
+sudo systemctl restart reload apache2
+sudo systemctl restart apache2
+sudo systemctl status apache2
+
+******In windows base machine
+edit C:\Windows\System32\drivers\etc\hosts file
+(ser1_ip website_name)
+192.168.80.130 www.shuhari.local
+
+
+****In deb3-ser1 
+openssl s_client -connect www.shuhari.local:443
