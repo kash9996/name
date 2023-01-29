@@ -2,6 +2,38 @@
 192.168.80.129 - deb 2 - hostname: subca
 192.168.80.130 - deb 3 - hostname: ser1
 
+
+
+####dhcp#################
+
+sudo apt install isc-dhcp-server
+sudo nano /etc/default/isc-dhcp-server
+	ens33
+sudo nano /etc/dhcp/dhcpd.conf
+	range
+sudo systemctl start isc-dhcp-server.service
+sudo systemctl stop isc-dhcp-server.service
+sudo systemctl restart isc-dhcp-server.service
+
+######DNS###################
+
+sudo apt install bind9 bind9utils bind9-doc
+sudo systemctl status bind9
+
+sudo service bind9 start
+
+sudo service bind9 stop
+
+sudo service bind9 restart
+
+sudo netstat -lnptu | grep named
+
+cd /etc/bind
+sudo nano named.conf.options
+Let's replace listen-on {127.0.0.1;};
+by
+listen-on {any;};
+listen-on-v6 { any; }
 *********In ser1
 sudo nano /etc/hostname
 ser1
